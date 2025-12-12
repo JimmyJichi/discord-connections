@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord Connected Accounts Viewer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/simple-icons-font@v15/font/simple-icons.min.css" type="text/css">
+    <style>
+        .account-badge {
+            font-size: 0.8em;
+            margin: 2px;
+        }
+        .server-section {
+            margin-bottom: 2rem;
+        }
+        .member-card {
+            margin-bottom: 1rem;
+        }
+        .no-accounts {
+            color: #6c757d;
+            font-style: italic;
+        }
+        .upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            transition: border-color 0.3s ease;
+        }
+        .upload-area:hover {
+            border-color: #0d6efd;
+        }
+        .upload-area.dragover {
+            border-color: #0d6efd;
+            background-color: #f8f9fa;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1 class="mb-0">
+                        <i class="fab fa-discord text-primary"></i>
+                        Discord Connected Accounts Viewer
+                    </h1>
+                    <div class="btn-group" role="group">
+                        <div class="btn btn-outline-secondary">
+                            <select class="form-select form-select-sm" id="connectionFilter" onchange="displayData()">
+                                <option value="">All connections</option>
+                                <option value="amazon_music">Amazon Music</option>
+                                <option value="battle_net">Battle.net</option>
+                                <option value="bluesky">Bluesky</option>
+                                <option value="bungie">Bungie</option>
+                                <option value="crunchyroll">Crunchyroll</option>
+                                <option value="domain">Domain</option>
+                                <option value="ebay">eBay</option>
+                                <option value="epic_games">Epic Games</option>
+                                <option value="facebook">Facebook</option>
+                                <option value="github">GitHub</option>
+                                <option value="instagram">Instagram</option>
+                                <option value="league_of_legends">League of Legends</option>
+                                <option value="paypal">PayPal</option>
+                                <option value="playstation">PlayStation</option>
+                                <option value="reddit">Reddit</option>
+                                <option value="riot_games">Riot Games</option>
+                                <option value="roblox">Roblox</option>
+                                <option value="skype">Skype</option>
+                                <option value="spotify">Spotify</option>
+                                <option value="steam">Steam</option>
+                                <option value="tiktok">TikTok</option>
+                                <option value="twitter">Twitter</option>
+                                <option value="twitch">Twitch</option>
+                                <option value="xbox">Xbox</option>
+                                <option value="youtube">YouTube</option>
+                            </select>
+                        </div>
+                        <div class="btn btn-outline-secondary" id="hideEmptyUsersContainer">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="hideEmptyUsers" onchange="displayData()">
+                                <label class="form-check-label" for="hideEmptyUsers">
+                                    Hide users with no accounts
+                                </label>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline-secondary" onclick="exportToCSV()">
+                            <i class="fas fa-download"></i> Export CSV
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="toggleView()">
+                            <i class="fas fa-th-large"></i> Toggle View
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload Section -->
+        <div class="row mb-4" id="uploadSection">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-upload"></i> Upload JSON File
+                        </h5>
+                        <div class="upload-area" id="uploadArea">
+                            <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                            <h5>Drag and drop your connected_accounts.json file here</h5>
+                            <p class="text-muted">or</p>
+                            <input type="file" id="fileInput" accept=".json" class="form-control d-none">
+                            <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                                <i class="fas fa-folder-open"></i> Choose File
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Section -->
+        <div class="row mb-4 hidden" id="statsSection">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-chart-bar"></i> Statistics
+                        </h5>
+                        <div class="row" id="statsContent">
+                            <!-- Stats will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Display Section -->
+        <div class="row hidden" id="dataSection">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-table"></i> Connected Accounts Data
+                        </h5>
+                        <div id="dataContent">
+                            <!-- Data will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentView = 'cards'; // 'cards' or 'table'
+        let jsonData = null;
+
+        // File upload handling
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    jsonData = JSON.parse(e.target.result);
+                    displayData();
+                    document.getElementById('uploadSection').classList.add('hidden');
+                    document.getElementById('statsSection').classList.remove('hidden');
+                    document.getElementById('dataSection').classList.remove('hidden');
+                } catch (error) {
+                    alert('Error parsing JSON file: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function displayData() {
+            if (!jsonData) return;
+
+            // Show/hide the "Hide users with no accounts" toggle based on filter
+            const connectionFilter = document.getElementById('connectionFilter').value;
+            const hideEmptyUsersContainer = document.getElementById('hideEmptyUsersContainer');
+            if (connectionFilter) {
+                hideEmptyUsersContainer.style.display = 'none';
+            } else {
+                hideEmptyUsersContainer.style.display = 'block';
+            }
+
+            displayStats();
+            if (currentView === 'cards') {
+                displayCards();
+            } else {
+                displayTable();
+            }
+        }
+
+        function displayStats() {
+            const stats = calculateStats();
+            const statsContent = document.getElementById('statsContent');
+            
+            statsContent.innerHTML = `
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h3 class="text-primary">${stats.totalServers}</h3>
+                        <p class="text-muted">Total Servers</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h3 class="text-success">${stats.totalMembers}</h3>
+                        <p class="text-muted">Total Members</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h3 class="text-info">${stats.totalAccounts}</h3>
+                        <p class="text-muted">Connected Accounts</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h3 class="text-warning">${stats.uniqueAccountTypes.length}</h3>
+                        <p class="text-muted">Account Types</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function calculateStats() {
+            let totalServers = 0;
+            let totalMembers = 0;
+            let totalAccounts = 0;
+            const accountTypes = new Set();
+
+            for (const serverName in jsonData) {
+                totalServers++;
+                const server = jsonData[serverName];
+                
+                for (const memberName in server) {
+                    totalMembers++;
+                    const member = server[memberName];
+                    
+                    if (member.connected_accounts && member.connected_accounts.length > 0) {
+                        totalAccounts += member.connected_accounts.length;
+                        
+                        member.connected_accounts.forEach(account => {
+                            if (Array.isArray(account.type)) {
+                                account.type.forEach(type => accountTypes.add(type));
+                            } else {
+                                accountTypes.add(account.type);
+                            }
+                        });
+                    }
+                }
+            }
+
+            return {
+                totalServers,
+                totalMembers,
+                totalAccounts,
+                uniqueAccountTypes: Array.from(accountTypes)
+            };
+        }
+
+        function displayCards() {
+            const dataContent = document.getElementById('dataContent');
+            let html = '';
+
+            for (const serverName in jsonData) {
+                const server = jsonData[serverName];
+                html += `
+                    <div class="server-section">
+                        <h4 class="border-bottom pb-2">
+                            <i class="fas fa-server text-primary"></i> ${serverName}
+                            <span class="badge bg-secondary ms-2">${Object.keys(server).length} members</span>
+                        </h4>
+                        <div class="row">
+                `;
+
+                for (const memberName in server) {
+                    const member = server[memberName];
+                    const accountCount = member.connected_accounts ? member.connected_accounts.length : 0;
+                    
+                    // Skip users with no connected accounts if toggle is enabled
+                    const hideEmptyUsers = document.getElementById('hideEmptyUsers').checked;
+                    if (hideEmptyUsers && accountCount === 0) continue;
+                    
+                    // Apply connection filter - hide users who don't have the selected connection
+                    const connectionFilter = document.getElementById('connectionFilter').value;
+                    if (connectionFilter) {
+                        if (accountCount === 0) continue; // Hide users with no accounts when filter is applied
+                        const hasFilteredConnection = member.connected_accounts.some(account => {
+                            const accountType = Array.isArray(account.type) ? account.type[0] : account.type;
+                            return accountType === connectionFilter;
+                        });
+                        if (!hasFilteredConnection) continue; // Hide users without the selected connection
+                    }
+                    
+                    html += `
+                        <div class="col-md-6 col-lg-4">
+                            <div class="card member-card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">${memberName}</h6>
+                                    <span class="badge bg-primary">${accountCount} accounts</span>
+                                </div>
+                                <div class="card-body">
+                    `;
+
+                    if (accountCount > 0) {
+                        member.connected_accounts.forEach(account => {
+                            const accountType = Array.isArray(account.type) ? account.type[0] : account.type;
+                            const iconClass = getAccountTypeIcon(accountType);
+                            const isSimpleIcon = iconClass.startsWith('si-');
+                            const isSkype = accountType === 'skype';
+                            const isAmazonMusic = accountType === 'amazon_music';
+                            const isDomain = accountType === 'domain';
+                            const isQuestion = iconClass === 'fas fa-question';
+                            const profileUrl = getProfileUrl(accountType, account.id, account.name);
+                            
+                            let iconHtml = isSimpleIcon 
+                                ? `<i class="si ${iconClass} si--color" style="font-size: 1.2em; margin-right: 8px;" title="${accountType}"></i>`
+                                : `<i class="${iconClass}" style="font-size: 1.2em; margin-right: 8px; color: ${isSkype ? '#0078d4' : isAmazonMusic ? '#ff9900' : isDomain ? '#007bff' : isQuestion ? '#dc3545' : '#107c10'};" title="${accountType}"></i>`;
+                            
+                            if (profileUrl) {
+                                iconHtml = `<a href="${profileUrl}" target="_blank" style="text-decoration: none;">${iconHtml}</a>`;
+                            }
+                            
+                            html += `
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div>
+                                        <strong title="${account.id}" data-bs-toggle="tooltip" data-bs-placement="top">${account.name}</strong>
+                                    </div>
+                                    <div class="text-end">
+                                        ${iconHtml}
+                                        ${account.verified ? '<i class="fas fa-check-circle text-success"></i>' : '<i class="fas fa-times-circle text-danger"></i>'}
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    } else {
+                        html += '<p class="no-accounts">No connected accounts</p>';
+                    }
+
+                    html += `
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+
+            dataContent.innerHTML = html;
+            
+            // Initialize Bootstrap tooltips
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        }
+
+        function displayTable() {
+            const dataContent = document.getElementById('dataContent');
+            let html = `
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Server</th>
+                                <th>Member</th>
+                                <th>Account Name</th>
+                                <th>Account ID</th>
+                                <th>Type</th>
+                                <th>Verified</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            for (const serverName in jsonData) {
+                const server = jsonData[serverName];
+                
+                for (const memberName in server) {
+                    const member = server[memberName];
+                    
+                    // Skip users with no connected accounts if toggle is enabled
+                    const hideEmptyUsers = document.getElementById('hideEmptyUsers').checked;
+                    if (hideEmptyUsers && (!member.connected_accounts || member.connected_accounts.length === 0)) continue;
+                    
+                    // Apply connection filter - hide users who don't have the selected connection
+                    const connectionFilter = document.getElementById('connectionFilter').value;
+                    if (connectionFilter) {
+                        if (!member.connected_accounts || member.connected_accounts.length === 0) continue; // Hide users with no accounts when filter is applied
+                        const hasFilteredConnection = member.connected_accounts.some(account => {
+                            const accountType = Array.isArray(account.type) ? account.type[0] : account.type;
+                            return accountType === connectionFilter;
+                        });
+                        if (!hasFilteredConnection) continue; // Hide users without the selected connection
+                    }
+                    
+                    if (member.connected_accounts && member.connected_accounts.length > 0) {
+                        // Filter accounts based on connection filter
+                        const connectionFilter = document.getElementById('connectionFilter').value;
+                        const filteredAccounts = connectionFilter 
+                            ? member.connected_accounts.filter(account => {
+                                const accountType = Array.isArray(account.type) ? account.type[0] : account.type;
+                                return accountType === connectionFilter;
+                            })
+                            : member.connected_accounts;
+                        
+                        filteredAccounts.forEach(account => {
+                            const accountType = Array.isArray(account.type) ? account.type[0] : account.type;
+                            const iconClass = getAccountTypeIcon(accountType);
+                            const isSimpleIcon = iconClass.startsWith('si-');
+                            const isSkype = accountType === 'skype';
+                            const isAmazonMusic = accountType === 'amazon_music';
+                            const isDomain = accountType === 'domain';
+                            const isQuestion = iconClass === 'fas fa-question';
+                            const profileUrl = getProfileUrl(accountType, account.id, account.name);
+                            
+                            let iconHtml = isSimpleIcon 
+                                ? `<i class="si ${iconClass} si--color" style="font-size: 1.2em;" title="${accountType}"></i>`
+                                : `<i class="${iconClass}" style="font-size: 1.2em; color: ${isSkype ? '#0078d4' : isAmazonMusic ? '#ff9900' : isDomain ? '#007bff' : isQuestion ? '#dc3545' : '#107c10'};" title="${accountType}"></i>`;
+                            
+                            if (profileUrl) {
+                                iconHtml = `<a href="${profileUrl}" target="_blank" style="text-decoration: none;">${iconHtml}</a>`;
+                            }
+                            
+                            html += `
+                                <tr>
+                                    <td><strong>${serverName}</strong></td>
+                                    <td>${memberName}</td>
+                                    <td>${account.name}</td>
+                                    <td><code>${account.id}</code></td>
+                                    <td>${iconHtml}</td>
+                                    <td>${account.verified ? '<i class="fas fa-check-circle text-success"></i>' : '<i class="fas fa-times-circle text-danger"></i>'}</td>
+                                </tr>
+                            `;
+                        });
+                    } else {
+                        html += `
+                            <tr>
+                                <td><strong>${serverName}</strong></td>
+                                <td>${memberName}</td>
+                                <td colspan="4" class="text-muted">No connected accounts</td>
+                            </tr>
+                        `;
+                    }
+                }
+            }
+
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            dataContent.innerHTML = html;
+        }
+
+        function getAccountTypeIcon(type) {
+            const icons = {
+                'steam': 'si-steam',
+                'twitch': 'si-twitch',
+                'youtube': 'si-youtube',
+                'twitter': 'si-x',
+                'instagram': 'si-instagram',
+                'spotify': 'si-spotify',
+                'xbox': 'fa-brands fa-xbox', // Using Font Awesome Xbox icon
+                'playstation': 'si-playstation',
+                'roblox': 'si-roblox',
+                'tiktok': 'si-tiktok',
+                'crunchyroll': 'si-crunchyroll',
+                'epic_games': 'si-epicgames',
+                'riot_games': 'si-riotgames',
+                'bluesky': 'si-bluesky',
+                'github': 'si-github',
+                'reddit': 'si-reddit',
+                'battle_net': 'si-battledotnet',
+                'domain': 'fas fa-globe',
+                'bungie': 'si-bungie',
+                'league_of_legends': 'si-leagueoflegends',
+                'skype': 'fa-brands fa-skype',
+                'facebook': 'si-facebook',
+                'ebay': 'si-ebay',
+                'paypal': 'si-paypal',
+                'amazon_music': 'fa-brands fa-amazon'
+            };
+            return icons[type] || 'fas fa-question';
+        }
+
+        function getProfileUrl(type, id, name) {
+            const urlMap = {
+                'steam': `https://steamcommunity.com/profiles/${id}`,
+                'twitch': `https://twitch.tv/${name}`,
+                'youtube': `https://youtube.com/channel/${id}`,
+                'twitter': `https://twitter.com/${name}`,
+                'instagram': `https://instagram.com/${name}`,
+                'spotify': `https://open.spotify.com/user/${id}`,
+                'tiktok': `https://tiktok.com/@${name}`,
+                'bluesky': `https://bsky.app/profile/${name}`,
+                'github': `https://github.com/${name}`,
+                'reddit': `https://reddit.com/user/${name}`,
+                'domain': `https://${name}`
+            };
+            return urlMap[type] || null;
+        }
+
+        function toggleView() {
+            currentView = currentView === 'cards' ? 'table' : 'cards';
+            displayData();
+        }
+
+        function exportToCSV() {
+            if (!jsonData) return;
+
+            let csv = 'Server,Member,Account Name,Account ID,Type,Verified\n';
+            
+            for (const serverName in jsonData) {
+                const server = jsonData[serverName];
+                
+                for (const memberName in server) {
+                    const member = server[memberName];
+                    
+                    // Skip users with no connected accounts if toggle is enabled
+                    const hideEmptyUsers = document.getElementById('hideEmptyUsers').checked;
+                    if (hideEmptyUsers && (!member.connected_accounts || member.connected_accounts.length === 0)) continue;
+                    
+                    // Apply connection filter - hide users who don't have the selected connection
+                    const connectionFilter = document.getElementById('connectionFilter').value;
+                    if (connectionFilter) {
+                        if (!member.connected_accounts || member.connected_accounts.length === 0) continue; // Hide users with no accounts when filter is applied
+                        const hasFilteredConnection = member.connected_accounts.some(account => {
+                            const accountType = Array.isArray(account.type) ? account.type[0] : account.type;
+                            return accountType === connectionFilter;
+                        });
+                        if (!hasFilteredConnection) continue; // Hide users without the selected connection
+                    }
+                    
+                    if (member.connected_accounts && member.connected_accounts.length > 0) {
+                        member.connected_accounts.forEach(account => {
+                            const accountType = Array.isArray(account.type) ? account.type[0] : account.type;
+                            csv += `"${serverName}","${memberName}","${account.name}","${account.id}","${accountType}","${account.verified}"\n`;
+                        });
+                    } else {
+                        csv += `"${serverName}","${memberName}","","","",""\n`;
+                    }
+                }
+            }
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'connected_accounts.csv';
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html> 
