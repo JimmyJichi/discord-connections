@@ -2,7 +2,6 @@ import argparse
 import json
 import logging
 import os
-from time import sleep
 import sys
 import asyncio
 
@@ -25,7 +24,6 @@ class MyClient(discord.Client):
     def __init__(
         self,
         sleep_time,
-        output_verbosity,
         print_info,
         write_to_json,
         output_path,
@@ -37,7 +35,6 @@ class MyClient(discord.Client):
     ):
         super().__init__()
         self.sleep_time = sleep_time
-        self.output_verbosity = output_verbosity
         self.print_info = print_info
         self.write_to_json = write_to_json
         self.output_path = output_path
@@ -49,10 +46,8 @@ class MyClient(discord.Client):
         print("MyClient initialized successfully")
 
     async def on_ready(self) -> None:
-        friend_ids = self.get_friend_ids(self)
-        server_info = await self.get_server_info(
+        connected_accounts = await self.get_connected_accounts(
             self,
-            friend_ids,
             self.sleep_time,
             self.include_servers,
             self.include_channels,
@@ -60,136 +55,34 @@ class MyClient(discord.Client):
             self.period_max_members,
             self.pause_duration,
         )
-        friends = self.get_friends(server_info)
-        mutual_friends = self.get_mutual_friends(server_info, self.output_verbosity)
-        mutual_servers = self.get_mutual_servers(server_info, self.output_verbosity)
 
         if self.print_info:
-            self.print_client_info(server_info, friends, mutual_friends, mutual_servers)
+            self.print_connected_accounts(connected_accounts)
 
         if self.write_to_json:
-            self.write_data_to_json(
-                server_info, friends, mutual_friends, mutual_servers, self.output_path
+            self.write_connected_accounts_to_json(
+                connected_accounts,
+                self.output_path,
             )
 
         await self.close()
 
-    def get_friend_ids(self, client: discord.Client) -> set:
-        friend_ids = set()
-        for friend in self.friends:
-            friend_ids.add(friend.user.id)
-        return friend_ids
+    def print_connected_accounts(self, connected_accounts):
+        print("Connected Accounts:")
+        print(json.dumps(connected_accounts, indent=4))
 
-    def get_friends(self, server_info: dict) -> dict:
-        friends = dict()
-        for server in server_info:
-            friends[server] = list()
-            for member in server_info[server]:
-                if server_info[server][member]["is_friend"]:
-                    friends[server].append(member)
-        return friends
-
-    def get_mutual_friends(self, server_info: dict, output_verbosity: int) -> dict:
-        mutual_friends = dict()
-        for server in server_info:
-            mutual_friends[server] = list()
-            for member in server_info[server]:
-                if server_info[server][member]["mutual_friends"]:
-                    mutual_friends[server].append(
-                        (
-                            -len(server_info[server][member]["mutual_friends"]),
-                            member,
-                            server_info[server][member]["mutual_friends"],
-                        )
-                    )
-            mutual_friends[server].sort()
-            if output_verbosity == 1:
-                mutual_friends[server] = [
-                    member
-                    for mutual_friends_count, member, mutual_friends_list in mutual_friends[
-                        server
-                    ]
-                ]
-            elif output_verbosity == 2:
-                mutual_friends[server] = [
-                    (member, -mutual_friends_count)
-                    for mutual_friends_count, member, mutual_friends_list in mutual_friends[
-                        server
-                    ]
-                ]
-            elif output_verbosity == 3:
-                mutual_friends[server] = [
-                    (member, -mutual_friends_count, mutual_friends_list)
-                    for mutual_friends_count, member, mutual_friends_list in mutual_friends[
-                        server
-                    ]
-                ]
-        return mutual_friends
-
-    def get_mutual_servers(self, server_info: dict, output_verbosity: int) -> dict:
-        mutual_servers = dict()
-        for server in server_info:
-            mutual_servers[server] = list()
-            for member in server_info[server]:
-                if server_info[server][member]["mutual_servers"]:
-                    mutual_servers[server].append(
-                        (
-                            -len(server_info[server][member]["mutual_servers"]),
-                            member,
-                            server_info[server][member]["mutual_servers"],
-                        )
-                    )
-            mutual_servers[server].sort()
-            if output_verbosity == 1:
-                mutual_servers[server] = [
-                    member
-                    for mutual_servers_count, member, mutual_servers_list in mutual_servers[
-                        server
-                    ]
-                ]
-            elif output_verbosity == 2:
-                mutual_servers[server] = [
-                    (member, -mutual_servers_count)
-                    for mutual_servers_count, member, mutual_servers_list in mutual_servers[
-                        server
-                    ]
-                ]
-            elif output_verbosity == 3:
-                mutual_servers[server] = [
-                    (member, -mutual_servers_count, mutual_servers_list)
-                    for mutual_servers_count, member, mutual_servers_list in mutual_servers[
-                        server
-                    ]
-                ]
-        return mutual_servers
-
-    def print_client_info(self, server_info, friends, mutual_friends, mutual_servers):
-        print("Server Info:")
-        print(json.dumps(server_info, indent=4))
-        print("\nFriends:")
-        print(json.dumps(friends, indent=4))
-        print("\nMutual Friends:")
-        print(json.dumps(mutual_friends, indent=4))
-        print("\nMutual Servers:")
-        print(json.dumps(mutual_servers, indent=4))
-
-    def write_data_to_json(
-        self, server_info, friends, mutual_friends, mutual_servers, output_path
+    def write_connected_accounts_to_json(
+        self,
+        connected_accounts,
+        output_path,
     ):
         os.makedirs(output_path, exist_ok=True)
-        with open(os.path.join(output_path, "server_info.json"), "w") as f:
-            json.dump(server_info, f, indent=4)
-        with open(os.path.join(output_path, "friends.json"), "w") as f:
-            json.dump(friends, f, indent=4)
-        with open(os.path.join(output_path, "mutual_friends.json"), "w") as f:
-            json.dump(mutual_friends, f, indent=4)
-        with open(os.path.join(output_path, "mutual_servers.json"), "w") as f:
-            json.dump(mutual_servers, f, indent=4)
+        with open(os.path.join(output_path, "connected_accounts.json"), "w") as f:
+            json.dump(connected_accounts, f, indent=4)
 
-    async def get_server_info(
+    async def get_connected_accounts(
         self,
         client: discord.Client,
-        friend_ids: set,
         sleep_time: float,
         include_servers: set,
         include_channels: set,
@@ -220,7 +113,7 @@ class MyClient(discord.Client):
 
         user_servers = await client.fetch_guilds()
         servers_count = len(user_servers)
-        server_info = dict()
+        connected_accounts = dict()
         seen_members = dict()
         include_servers = set(include_servers)
         include_channels = set(include_channels)
@@ -272,7 +165,7 @@ class MyClient(discord.Client):
 
             selected_server_member_count = min(server_member_count, max_members)
 
-            server_info[server_name] = dict()
+            connected_accounts[server_name] = dict()
 
             for start_idx in range(0, selected_server_member_count, period_max_members):
                 end_idx = min(
@@ -292,20 +185,13 @@ class MyClient(discord.Client):
                     if member.id == client.user.id:
                         continue
 
-                    member_name = f"{member.name}#{member.discriminator}"
+                    member_name = f"{member.name}"
 
                     if member_name in seen_members:
-                        server_info[server_name][member_name] = dict()
-                        server_info[server_name][member_name]["is_friend"] = (
-                            seen_members[member_name]["is_friend"]
-                        )
-                        server_info[server_name][member_name]["mutual_friends"] = (
-                            seen_members[member_name]["mutual_friends"]
-                        )
-
-                        server_info[server_name][member_name]["mutual_servers"] = (
-                            seen_members[member_name]["mutual_servers"]
-                        )
+                        connected_accounts[server_name][member_name] = dict()
+                        connected_accounts[server_name][member_name][
+                            "connected_accounts"
+                        ] = seen_members[member_name]["connected_accounts"]
                         continue
                     else:
                         seen_members[member_name] = dict()
@@ -313,8 +199,8 @@ class MyClient(discord.Client):
                     try:
                         member_profile = await server.fetch_member_profile(
                             member.id,
-                            with_mutual_guilds=True,
-                            with_mutual_friends=True,
+                            with_mutual_guilds=False,
+                            with_mutual_friends=False,
                         )
                     except (discord.errors.NotFound, discord.errors.InvalidData):
                         logging.warning(
@@ -332,50 +218,56 @@ class MyClient(discord.Client):
                         )
                         continue
 
-                    server_info[server_name][member_name] = dict()
+                    connected_accounts[server_name][member_name] = dict()
 
-                    mutual_friend_names = []
-                    mutual_server_names = []
-                    mutual_friends = member_profile.mutual_friends
-                    mutual_servers = member_profile.mutual_guilds
-
-                    if member.id in friend_ids:
-                        server_info[server_name][member_name]["is_friend"] = True
-                        seen_members[member_name]["is_friend"] = True
-                    else:
-                        server_info[server_name][member_name]["is_friend"] = False
-                        seen_members[member_name]["is_friend"] = False
-
-                    for friend in mutual_friends:
-                        friend_name = f"{friend.name}#{friend.discriminator}"
-                        mutual_friend_names.append(friend_name)
-
-                    server_info[server_name][member_name]["mutual_friends"] = (
-                        mutual_friend_names
+                    connected_accounts_payload = []
+                    accounts_source = (
+                        getattr(member_profile, "connections", None)
+                        or getattr(member_profile, "connected_accounts", None)
+                        or []
                     )
-                    seen_members[member_name]["mutual_friends"] = mutual_friend_names
+                    for account in accounts_source or []:
+                        visibility = None
+                        try:
+                            visibility_value = account.visibility
+                            if hasattr(visibility_value, "name"):
+                                visibility = visibility_value.name
+                            elif hasattr(visibility_value, "value"):
+                                visibility = visibility_value.value
+                            else:
+                                visibility = visibility_value
+                        except Exception:
+                            visibility = None
 
-                    for mutual_server in mutual_servers:
-                        if mutual_server.id != server.id:
-                            mutual_server_names.append(mutual_server.guild.name)
+                        connected_accounts_payload.append(
+                            {
+                                "id": getattr(account, "id", None),
+                                "name": getattr(account, "name", None),
+                                "type": getattr(account, "type", None),
+                                "verified": getattr(account, "verified", None),
+                                "visibility": visibility,
+                            }
+                        )
 
-                    server_info[server_name][member_name]["mutual_servers"] = (
-                        mutual_server_names
+                    connected_accounts[server_name][member_name]["connected_accounts"] = (
+                        connected_accounts_payload
                     )
-
-                    seen_members[member_name]["mutual_servers"] = mutual_server_names
+                    seen_members[member_name]["connected_accounts"] = (
+                        connected_accounts_payload
+                    )
 
                     await asyncio.sleep(sleep_time)
 
-                logging.info(f"Pausing for {pause_duration} seconds...")
-                await asyncio.sleep(pause_duration)
+                if end_idx < selected_server_member_count:
+                    logging.info(f"Pausing for {pause_duration} seconds...")
+                    await asyncio.sleep(pause_duration)
 
         unmatched_servers = include_servers.difference(matched_servers)
         if unmatched_servers:
             logging.warning(
                 f"Did not find the following servers: {unmatched_servers} consider choosing from the following servers: {seen_servers}"
             )
-        return server_info
+        return connected_accounts
 
 
 def check_positive_float(original_value):
@@ -406,26 +298,17 @@ def add_arguments(parser: argparse.ArgumentParser, output_path=str):
     )
 
     parser.add_argument(
-        "-v",
-        "--output_verbosity",
-        default=2,
-        type=int,
-        choices=[1, 2, 3],
-        help="How much information to be included in the mutual friends and mutual servers files. 1 means just the member name. 2 means the member name and a count the member's of mutual friends or mutual servers. 3 means the member name and a list of the member's mutual friends or mutual servers. Example --output_verbosity 3, default=2",
-    )
-
-    parser.add_argument(
         "-p",
         "--print_info",
         default=True,
-        help="If true, the server info, mutual friends, and mutual servers are printed to the command line. Example --print_info False, default=True",
+        help="If true, connected account data is printed to the command line. Example --print_info False, default=True",
     )
 
     parser.add_argument(
         "-j",
         "--write_to_json",
         default=True,
-        help="If true, the server info, mutual friends, and mutual servers are written to json files. Example --write_to_json False, default=True",
+        help="If true, connected account data is written to connected_accounts.json. Example --write_to_json False, default=True",
     )
 
     parser.add_argument(
@@ -502,7 +385,6 @@ if __name__ == "__main__":
 
     client = MyClient(
         sleep_time=args.sleep_time,
-        output_verbosity=args.output_verbosity,
         print_info=args.print_info,
         write_to_json=args.write_to_json,
         output_path=args.output_path,
